@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<!-- data-theme starts as "light" — JavaScript flips it to "dark" when toggled.
+     All colours in the CSS read from this attribute via CSS variables. -->
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <!-- viewport meta makes the page scale correctly on phones -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tic Tac Toe</title>
+
+  <!-- Two Google Fonts:
+       Syne      — bold, geometric display font used for headings and labels
+       DM Mono   — monospace font used for X/O marks and score numbers -->
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ════════════════════════════════════════════
+       THEME VARIABLES
+       We define every colour as a CSS variable on :root (light mode).
+       The [data-theme="dark"] block overrides them for dark mode.
+       Every other CSS rule references var(--name) so we only need
+       to change values in ONE place to switch the whole theme.
+    ════════════════════════════════════════════ */
+    :root {
+      --bg:            #f5f0e8; /* warm off-white page background          */
+      --surface:       #fff;    /* card / cell backgrounds                 */
+      --surface2:      #f0ebe0; /* slightly darker surface for hover states*/
+      --border:        #d8d0c0; /* default border colour                   */
+      --text:          #1a1410; /* primary text — near-black               */
+      --text2:         #7a6e60; /* secondary / muted text                  */
+      --accent-x:      #c94a2a; /* X player colour — burnt orange          */
+      --accent-o:      #2a6ec9; /* O player colour — blue                  */
+      --accent-x-soft: #fce8e3; /* light tint used as X cell background    */
+      --accent-o-soft: #e3eefe; /* light tint used as O cell background    */
+      --win-line:      #1a1410; /* colour of the SVG strike-through line   */
+      --cell-size:     110px;   /* width AND height of each board cell     */
+    }
+
+    /* Dark mode overrides — same variable names, different values */
+    [data-theme="dark"] {
+      --bg:            #111018;
+      --surface:       #1c1b24;
+      --surface2:      #252432;
+      --border:        #2e2d3d;
+      --text:          #f0eeff;
+      --text2:         #7a7890;
+      --accent-x:      #ff6b47; /* brighter orange for dark bg */
+      --accent-x-soft: #2a1810;
+      --accent-o:      #5b9fff; /* brighter blue for dark bg   */
+      --accent-o-soft: #0f1e30;
+      --win-line:      #f0eeff;
+    }
+
+    /* ════════════════════════════════════════════
+       RESET
+       Remove default browser margin/padding and use border-box sizing
+       so padding is included inside element widths (not added on top).
+    ════════════════════════════════════════════ */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ════════════════════════════════════════════
+       BODY
+       Flex column so everything stacks vertically and centres horizontally.
+       transition: background/color animates smoothly on theme switch.
+    ════════════════════════════════════════════ */
+    body {
+      font-family: 'Syne', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;          /* always fills the full screen height */
+      display: flex;
+      flex-direction: column;
+      align-items: center;        /* horizontally centred */
+      padding: 2rem 1rem;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* ════════════════════════════════════════════
+       HEADER
+       space-between pushes the title left and the toggle button right.
+    ════════════════════════════════════════════ */
+    header {
+      width: 100%;
+      max-width: 500px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; }
+    /* The × in the title gets the X accent colour for a subtle design touch */
+    h1 span { color: var(--accent-x); }
+
+    /* ════════════════════════════════════════════
+       DARK MODE TOGGLE BUTTON
+       Pill-shaped button in the header corner.
+       Clicking it calls toggleTheme() in JS.
+    ════════════════════════════════════════════ */
+    #theme-toggle {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;       /* large radius = pill shape */
+      padding: 6px 14px;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.85rem;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #theme-toggle:hover { color: var(--text); border-color: var(--text2); }
+
+    /* ════════════════════════════════════════════
+       MODE SELECTOR (2 Players / AI Easy / Medium / Hard)
+       .pill buttons sit in a flex row.
+       .pill.active = the currently selected mode (inverted colours).
+    ════════════════════════════════════════════ */
+    .mode-section { width: 100%; max-width: 500px; margin-bottom: 1.5rem; }
+
+    /* Small uppercase label above the pills */
+    .mode-label {
+      font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text2); margin-bottom: 0.5rem;
+    }
+
+    .mode-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .pill {
+      font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700;
+      padding: 7px 16px; border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--surface); color: var(--text2);
+      cursor: pointer; transition: all 0.18s;
+    }
+    .pill:hover { border-color: var(--text2); color: var(--text); }
+
+    /* Active pill: inverted — dark background, light text */
+    .pill.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+    /* ════════════════════════════════════════════
+       SCOREBOARD
+       Three cards in a row: X score | Draw | O score.
+       grid-template-columns: 1fr auto 1fr makes the Draw card
+       shrink to its content while the two score cards share space equally.
+    ════════════════════════════════════════════ */
+    .scores {
+      width: 100%; max-width: 500px;
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      gap: 8px; margin-bottom: 1.5rem;
+    }
+
+    .score-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; text-align: center;
+    }
+    /* X and O cards get a coloured border to match their player */
+    .score-card.x-card { border-color: var(--accent-x); }
+    .score-card.o-card { border-color: var(--accent-o); }
+
+    /* Small uppercase label inside each score card */
+    .score-name {
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text2); margin-bottom: 4px;
+    }
+
+    /* The big number — uses the monospace font for a clean look */
+    .score-num { font-family: 'DM Mono', monospace; font-size: 2rem; font-weight: 500; line-height: 1; }
+    .score-card.x-card .score-num { color: var(--accent-x); }
+    .score-card.o-card .score-num { color: var(--accent-o); }
+
+    /* ════════════════════════════════════════════
+       STATUS TEXT
+       One line above the board showing whose turn it is, or who won.
+       JS swaps the class (x-turn / o-turn / win) to change the colour.
+    ════════════════════════════════════════════ */
+    #status {
+      font-size: 1rem; font-weight: 700; letter-spacing: 0.02em;
+      color: var(--text2); margin-bottom: 1.25rem;
+      height: 24px;           /* fixed height prevents layout shift */
+      transition: color 0.2s;
+    }
+    #status.x-turn { color: var(--accent-x); }
+    #status.o-turn { color: var(--accent-o); }
+    #status.win    { color: var(--text); font-size: 1.1rem; }
+
+    /* ════════════════════════════════════════════
+       BOARD WRAPPER
+       position: relative so the SVG win-line overlay can be
+       positioned absolute on top of the grid.
+       Size = 3 cells + 2 gaps (8px each) = (cell-size * 3) + 16px.
+    ════════════════════════════════════════════ */
+    .board-wrap {
+      position: relative;
+      width: calc(var(--cell-size) * 3 + 16px);
+      height: calc(var(--cell-size) * 3 + 16px);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ════════════════════════════════════════════
+       CELL GRID
+       CSS Grid with 3 equal columns and an 8px gap.
+       Each cell is a square defined by --cell-size.
+    ════════════════════════════════════════════ */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(3, var(--cell-size));
+      gap: 8px;
+    }
+
+    .cell {
+      width: var(--cell-size); height: var(--cell-size);
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Mono', monospace; font-size: 2.8rem; font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      user-select: none; /* prevents text highlighting on rapid clicks */
+    }
+
+    /* Hover effect: only on empty, interactive cells */
+    .cell:hover:not(.played):not(.locked) {
+      background: var(--surface2); border-color: var(--text2);
+      transform: scale(1.03); /* subtle grow on hover */
+    }
+
+    /* .played = a mark has been placed — no longer clickable */
+    .cell.played { cursor: default; }
+
+    /* .locked = AI is thinking or game is over — show "not allowed" cursor */
+    .cell.locked { cursor: not-allowed; }
+
+    /* ─── Pop animation ───
+       When a mark is placed, the .mark span inside the cell plays this animation.
+       It starts tiny (scale 0.4) and overshoots slightly (scale 1.15)
+       before settling at normal size — giving a springy "pop" feel.
+       cubic-bezier(.34,1.56,.64,1) is a custom spring curve. */
+    @keyframes pop {
+      0%   { transform: scale(0.4); opacity: 0; }
+      70%  { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .cell .mark {
+      display: inline-block;
+      animation: pop 0.22s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    /* Played cells get a soft tinted background and coloured border */
+    .cell.x-cell { background: var(--accent-x-soft); border-color: var(--accent-x); }
+    .cell.o-cell { background: var(--accent-o-soft); border-color: var(--accent-o); }
+    .cell.x-cell .mark { color: var(--accent-x); }
+    .cell.o-cell .mark { color: var(--accent-o); }
+
+    /* ════════════════════════════════════════════
+       WIN LINE SVG OVERLAY
+       An <svg> sits on top of the board (position: absolute).
+       pointer-events: none means it doesn't block cell clicks.
+
+       The line is drawn using the "stroke-dasharray / stroke-dashoffset" trick:
+         - stroke-dasharray: 500 — the entire line is one long dash
+         - stroke-dashoffset: 500 — starts fully "offset" (invisible)
+         - When .visible is added, offset becomes 0 and the line "draws" itself
+           thanks to the CSS transition on stroke-dashoffset.
+    ════════════════════════════════════════════ */
+    #win-overlay {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; /* clicks pass through to the grid below */
+    }
+    #win-line {
+      stroke: var(--win-line); stroke-width: 5;
+      stroke-linecap: round; fill: none;
+      stroke-dasharray: 500;
+      stroke-dashoffset: 500;              /* hidden at first */
+      transition: stroke-dashoffset 0.5s ease;
+    }
+    #win-line.visible { stroke-dashoffset: 0; } /* triggers the draw animation */
+
+    /* ════════════════════════════════════════════
+       BUTTONS
+       .btn = base style (outlined, secondary)
+       .btn.primary = filled dark button (used for "New Game")
+    ════════════════════════════════════════════ */
+    .btn-row { display: flex; gap: 10px; }
+    .btn {
+      font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 700;
+      padding: 10px 24px; border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--surface); color: var(--text);
+      cursor: pointer; transition: all 0.18s;
+    }
+    .btn:hover { background: var(--surface2); border-color: var(--text2); }
+    .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn.primary:hover { opacity: 0.85; }
+
+    /* ════════════════════════════════════════════
+       CONFETTI CANVAS
+       Fixed to the viewport so it covers the whole screen.
+       z-index: 100 puts it above everything.
+       pointer-events: none means you can still click the board underneath.
+    ════════════════════════════════════════════ */
+    #confetti-canvas {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; z-index: 100;
+    }
+
+    /* ════════════════════════════════════════════
+       AI THINKING INDICATOR
+       A small text line that appears while the AI is deciding.
+       .active adds a blinking animation to make it feel "alive".
+    ════════════════════════════════════════════ */
+    #thinking {
+      font-size: 0.8rem; color: var(--text2);
+      margin-bottom: 0.5rem; height: 18px; /* fixed height to avoid layout jump */
+      font-family: 'DM Mono', monospace;
+    }
+    @keyframes blink { 0%,100%{ opacity:1 } 50%{ opacity:0.3 } }
+    #thinking.active { animation: blink 0.8s infinite; }
+
+    /* ════════════════════════════════════════════
+       RESPONSIVE
+       On screens narrower than 420px (most phones), shrink the cells
+       and the heading so nothing overflows.
+    ════════════════════════════════════════════ */
+    @media (max-width: 420px) {
+      :root { --cell-size: 90px; }
+      h1 { font-size: 1.3rem; }
+    }
+
+    /* ════════════════════════════════════════════
+       DEV LOG
+       A compact terminal-style changelog panel sitting below the buttons.
+       Uses DM Mono to look like a real developer log.
+       The toggle button collapses/expands the entry list.
+    ════════════════════════════════════════════ */
+    .devlog {
+      width: 100%; max-width: 500px;
+      margin-top: 2rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden; /* clips child corners to match border-radius */
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Header bar — always visible, click to expand/collapse */
+    .devlog-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface2);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .devlog-header:hover { background: var(--border); }
+
+    /* Left side of the header: green dot + title */
+    .devlog-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.75rem; font-weight: 500; color: var(--text2);
+      letter-spacing: 0.05em;
+    }
+
+    /* Blinking green "live" dot — purely decorative */
+    .devlog-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #3dba6f;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    /* Chevron arrow that rotates when the log is expanded */
+    .devlog-chevron {
+      font-size: 0.7rem; color: var(--text2);
+      transition: transform 0.25s ease;
+    }
+    .devlog.open .devlog-chevron { transform: rotate(180deg); }
+
+    /* The list of entries — hidden by default, revealed on .open */
+    .devlog-entries {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .devlog.open .devlog-entries { max-height: 300px; } /* large enough to fit all entries */
+
+    /* Each changelog row */
+    .devlog-entry {
+      display: flex; align-items: baseline; gap: 12px;
+      padding: 9px 16px;
+      border-top: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .devlog-entry:hover { background: var(--surface2); }
+
+    /* Version badge — monospace, accent coloured */
+    .devlog-version {
+      font-size: 0.7rem; font-weight: 500;
+      color: var(--accent-o);
+      white-space: nowrap; /* never wraps onto a second line */
+      min-width: 52px;
+    }
+
+    /* The description text next to the version */
+    .devlog-desc {
+      font-size: 0.72rem;
+      color: var(--text2);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Confetti canvas sits behind everything visually but is on top via z-index.
+       JavaScript draws animated rectangles onto it when someone wins. -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- Header: title on the left, dark/light toggle on the right -->
+  <header>
+    <h1>Tic<span>×</span>Toe</h1>
+    <!-- onclick calls toggleTheme() defined in the JS below -->
+    <button id="theme-toggle" onclick="toggleTheme()">🌙 Dark</button>
+  </header>
+
+  <!-- Mode selector — four pill buttons.
+       Each calls setMode() with its mode string.
+       "2 Players" is active by default (class="pill active"). -->
+  <div class="mode-section">
+    <div class="mode-label">Mode</div>
+    <div class="mode-pills">
+      <button class="pill active" onclick="setMode('pvp')"    id="pill-pvp">2 Players</button>
+      <button class="pill"        onclick="setMode('easy')"   id="pill-easy">AI — Easy</button>
+      <button class="pill"        onclick="setMode('medium')" id="pill-medium">AI — Medium</button>
+      <button class="pill"        onclick="setMode('hard')"   id="pill-hard">AI — Hard</button>
+    </div>
+  </div>
+
+  <!-- Scoreboard — three cards: X wins | Draws | O wins.
+       The score numbers (id="sx", "sd", "so") are updated by JS. -->
+  <div class="scores">
+    <div class="score-card x-card">
+      <!-- id="x-label" changes text between "Player 1" and "You" depending on mode -->
+      <div class="score-name" id="x-label">X — Player 1</div>
+      <div class="score-num" id="sx">0</div>
+    </div>
+    <div class="score-card">
+      <div class="score-name">Draw</div>
+      <div class="score-num" id="sd">0</div>
+    </div>
+    <div class="score-card o-card">
+      <div class="score-name" id="o-label">O — Player 2</div>
+      <div class="score-num" id="so">0</div>
+    </div>
+  </div>
+
+  <!-- AI thinking indicator — hidden by default, shown by JS when AI is deciding -->
+  <div id="thinking"></div>
+
+  <!-- Status line — shows whose turn it is, or who won.
+       JS swaps CSS classes (x-turn / o-turn / win) to change the colour. -->
+  <div id="status" class="x-turn">X's turn</div>
+
+  <!-- Board wrapper: holds the cell grid AND the SVG win-line overlay.
+       position:relative on the wrapper lets the SVG sit exactly on top. -->
+  <div class="board-wrap">
+
+    <!-- The 3×3 grid — JS clears and rebuilds this on every turn -->
+    <div id="grid"></div>
+
+    <!-- SVG overlay for the win strike-through line.
+         viewBox="0 0 348 348" matches the board's pixel dimensions.
+         The <line> element starts invisible; JS sets its coordinates
+         and adds .visible to animate it drawing across the winning cells. -->
+    <svg id="win-overlay" viewBox="0 0 348 348" xmlns="http://www.w3.org/2000/svg">
+      <line id="win-line" x1="0" y1="0" x2="0" y2="0" />
+    </svg>
+
+  </div>
+
+  <!-- Action buttons:
+       "New Game"     — resets the board but keeps scores
+       "Reset Scores" — zeroes scores AND resets the board -->
+  <div class="btn-row">
+    <button class="btn primary" onclick="resetGame()">New Game</button>
+    <button class="btn"         onclick="resetScores()">Reset Scores</button>
+  </div>
+
+  <!-- Dev Log panel — click the header to expand/collapse.
+       toggleDevLog() adds/removes .open on the .devlog element,
+       which CSS uses to animate the entry list in and rotate the chevron. -->
+  <div class="devlog" id="devlog">
+
+    <!-- Clickable header bar -->
+    <div class="devlog-header" onclick="toggleDevLog()">
+      <div class="devlog-title">
+        <!-- Blinking dot gives it a "live terminal" feel -->
+        <div class="devlog-dot"></div>
+        CHANGELOG
+      </div>
+      <!-- ▼ chevron rotates 180° when open -->
+      <span class="devlog-chevron">▼</span>
+    </div>
+
+    <!-- Collapsible list of version entries — newest at the top -->
+    <div class="devlog-entries">
+
+      <!-- V1.1.0 -->
+      <div class="devlog-entry">
+        <span class="devlog-version">v1.1.0</span>
+        <span class="devlog-desc">Hard AI upgraded to depth-weighted minimax — now prioritises faster wins and forces draws sooner. Genuinely brutal.</span>
+      </div>
+
+      <!-- V1.0.0 -->
+      <div class="devlog-entry">
+        <span class="devlog-version">v1.0.0</span>
+        <span class="devlog-desc">Initial release — 2-player and AI modes (easy / medium / hard), confetti, win line animation, light &amp; dark mode.</span>
+      </div>
+
+    </div>
+  </div>
+
+
+<script>
+  // ═══════════════════════════════════════════════════════════════
+  // GAME STATE
+  // These four variables hold everything the game needs to know.
+  // ═══════════════════════════════════════════════════════════════
+
+  // The board is an array of 9 cells. null = empty, 'X' or 'O' = played.
+  // Positions map to the grid like this:
+  //   0 | 1 | 2
+  //   3 | 4 | 5
+  //   6 | 7 | 8
+  let board = Array(9).fill(null);
+
+  let xTurn     = true;   // true = it's X's turn, false = O's turn
+  let gameOver  = false;  // becomes true after a win or draw — stops further play
+  let mode      = 'pvp';  // current mode: 'pvp' | 'easy' | 'medium' | 'hard'
+  let aiThinking = false; // true while the AI delay is running — prevents human clicks
+
+  // Score counters — persist across rounds until "Reset Scores" is clicked
+  let scores = { X: 0, O: 0, D: 0 };
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // WINNING COMBINATIONS
+  // Every possible set of three cell indexes that counts as a win.
+  // There are 8 total: 3 rows, 3 columns, 2 diagonals.
+  // ═══════════════════════════════════════════════════════════════
+  const winLines = [
+    [0,1,2], [3,4,5], [6,7,8], // rows (top, middle, bottom)
+    [0,3,6], [1,4,7], [2,5,8], // columns (left, centre, right)
+    [0,4,8], [2,4,6]            // diagonals
+  ];
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // getCellCenter(idx)
+  // Converts a cell index (0–8) into pixel coordinates in the SVG viewBox.
+  // Used to position the win line's start and end points.
+  //
+  // The SVG viewBox is 348×348.
+  // Each cell is ~110px with 8px gaps, so the step between cell centres = 118px.
+  // The first cell centre is at 59px (half of 110px + 4px for the gap offset).
+  // ═══════════════════════════════════════════════════════════════
+  function getCellCenter(idx) {
+    const col = idx % 3;             // 0, 1, or 2
+    const row = Math.floor(idx / 3); // 0, 1, or 2
+    return {
+      x: 59 + col * 118,
+      y: 59 + row * 118
+    };
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // checkWinner(b)
+  // Checks board array `b` for a win or draw.
+  // Returns { winner: 'X'|'O'|'Draw', line: [a,b,c] } or null if game continues.
+  // ═══════════════════════════════════════════════════════════════
+  function checkWinner(b) {
+    // Loop through all 8 winning combos
+    for (let combo of winLines) {
+      const [a, c, d] = combo;
+      // If all three cells in this line are the same (and not empty) — someone won
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) {
+        return { winner: b[a], line: combo };
+      }
+    }
+    // If all 9 cells are filled and no winner found — it's a draw
+    if (b.every(Boolean)) return { winner: 'Draw', line: null };
+
+    // Game is still going
+    return null;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // drawWinLine(line)
+  // Animates the SVG line that crosses through the winning cells.
+  // Uses the stroke-dashoffset trick defined in CSS:
+  //   1. Set the line's start/end coordinates to span the winning cells.
+  //   2. Add .visible — CSS transitions stroke-dashoffset from 500 → 0,
+  //      making the line appear to "draw" itself across the board.
+  // ═══════════════════════════════════════════════════════════════
+  function drawWinLine(line) {
+    const start = getCellCenter(line[0]); // first cell in the winning combo
+    const end   = getCellCenter(line[2]); // last cell in the winning combo
+    const el = document.getElementById('win-line');
+
+    // Set the SVG line's position
+    el.setAttribute('x1', start.x);
+    el.setAttribute('y1', start.y);
+    el.setAttribute('x2', end.x);
+    el.setAttribute('y2', end.y);
+
+    // Small timeout ensures the browser registers the attribute change
+    // before the CSS transition starts (otherwise it may skip the animation)
+    setTimeout(() => el.classList.add('visible'), 30);
+  }
+
+  // Hides and resets the win line (called on new game)
+  function clearWinLine() {
+    const el = document.getElementById('win-line');
+    el.classList.remove('visible');
+    // Reset coordinates so the next line starts fresh
+    el.setAttribute('x1', 0); el.setAttribute('y1', 0);
+    el.setAttribute('x2', 0); el.setAttribute('y2', 0);
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // render()
+  // Rebuilds the entire board UI from scratch based on current state.
+  // Called after every move, mode change, or reset.
+  // This "full rebuild" approach keeps the code simple — no need to
+  // track which individual cells changed.
+  // ═══════════════════════════════════════════════════════════════
+  function render() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = ''; // wipe the old cells
+
+    // Is it currently the AI's turn?
+    const isAiTurn = !xTurn && mode !== 'pvp';
+
+    // Rebuild one <div> for each of the 9 cells
+    board.forEach((val, i) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      if (val) {
+        // Cell has been played — show the X or O with a pop animation
+        cell.classList.add('played', val === 'X' ? 'x-cell' : 'o-cell');
+        const mark = document.createElement('span');
+        mark.className = 'mark'; // CSS animates this span
+        mark.textContent = val;
+        cell.appendChild(mark);
+
+      } else if (!gameOver && !isAiTurn && !aiThinking) {
+        // Cell is empty and the human can click it
+        cell.onclick = () => play(i);
+
+      } else {
+        // Cell is empty but not clickable (AI turn or game over)
+        cell.classList.add('locked');
+      }
+
+      grid.appendChild(cell);
+    });
+
+    // ── Update the status message ──
+    const result = checkWinner(board);
+    const status = document.getElementById('status');
+    status.className = ''; // clear previous colour class
+
+    if (result) {
+      // Game has ended
+      status.className = 'win';
+      if (result.winner === 'Draw') {
+        status.textContent = "It's a draw!";
+      } else {
+        // Show a friendly label: "Player 1" / "Player 2" in pvp, "You" / "AI" vs AI
+        const label = mode === 'pvp'
+          ? (result.winner === 'X' ? 'Player 1' : 'Player 2')
+          : (result.winner === 'X' ? 'You' : 'AI');
+        status.textContent = `${result.winner} wins — ${label}!`;
+      }
+    } else {
+      // Game is still going — show whose turn it is
+      const aiTurn = mode !== 'pvp' && !xTurn;
+      status.textContent = aiTurn ? "AI's turn" : `${xTurn ? 'X' : 'O'}'s turn`;
+      status.className = xTurn ? 'x-turn' : 'o-turn';
+    }
+
+    // ── Update the three score numbers ──
+    document.getElementById('sx').textContent = scores.X;
+    document.getElementById('so').textContent = scores.O;
+    document.getElementById('sd').textContent = scores.D;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // play(i)
+  // Called when a human clicks an empty cell at index i.
+  // Guards against: clicking after game over, clicking a taken cell,
+  // or clicking while the AI is thinking.
+  // ═══════════════════════════════════════════════════════════════
+  function play(i) {
+    if (gameOver || board[i] || aiThinking) return; // guard clauses
+
+    board[i] = xTurn ? 'X' : 'O'; // place the current player's mark
+    xTurn = !xTurn;                // flip whose turn it is
+
+    const result = checkWinner(board);
+    if (result) {
+      endGame(result); // someone won or drew — handle it
+      return;
+    }
+
+    render(); // redraw board for the next turn
+
+    // If we just switched to O's turn and we're in an AI mode, kick off AI move
+    if (!xTurn && mode !== 'pvp') scheduleAI();
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // endGame(result)
+  // Called when checkWinner() returns a result.
+  // Updates the score, draws the win line, and fires confetti on wins.
+  // ═══════════════════════════════════════════════════════════════
+  function endGame(result) {
+    gameOver = true; // lock the board
+
+    if (result.winner === 'Draw') {
+      scores.D++; // increment draw counter
+    } else {
+      scores[result.winner]++; // increment X or O win counter
+      drawWinLine(result.line);
+
+      // Confetti fires when a human wins:
+      //   - In pvp mode: always (both players are human)
+      //   - In AI mode: only when X (the human) wins — no confetti for the AI
+      if (mode === 'pvp' || result.winner === 'X') {
+        const color = result.winner === 'X' ? '#c94a2a' : '#2a6ec9';
+        fireConfetti(color);
+      }
+    }
+
+    render(); // update status message and score display
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // scheduleAI()
+  // Shows the "AI is thinking..." indicator and waits a short delay
+  // before actually picking a move. The delay makes it feel natural
+  // rather than instant, and gives the human time to see their move.
+  // ═══════════════════════════════════════════════════════════════
+  function scheduleAI() {
+    aiThinking = true; // lock human input
+    const el = document.getElementById('thinking');
+    el.textContent = 'AI is thinking...';
+    el.classList.add('active'); // start the blinking animation
+    render(); // re-render to apply .locked to empty cells
+
+    // Delay varies by difficulty — harder feels more "thoughtful"
+    const delay = mode === 'easy' ? 400 : mode === 'medium' ? 600 : 700;
+
+    setTimeout(() => {
+      aiThinking = false; // unlock human input
+      el.textContent = '';
+      el.classList.remove('active');
+
+      const move = getAIMove(); // pick a cell index
+      if (move !== -1) {
+        board[move] = 'O'; // AI always plays as O
+        xTurn = true;       // give control back to X
+
+        const result = checkWinner(board);
+        if (result) endGame(result);
+        else render();
+      }
+    }, delay);
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // AI MOVE DISPATCHER
+  // Routes to the correct strategy function based on the current mode.
+  // ═══════════════════════════════════════════════════════════════
+  function getAIMove() {
+    if (mode === 'easy')   return aiEasy();
+    if (mode === 'medium') return aiMedium();
+    return aiHard(); // 'hard'
+  }
+
+
+  // ── Easy AI ──────────────────────────────────────────────────
+  // Picks a completely random empty cell.
+  // No strategy at all — the AI will make silly mistakes regularly.
+  function aiEasy() {
+    const empty = board.map((v, i) => v === null ? i : -1).filter(i => i !== -1);
+    return empty.length ? empty[Math.floor(Math.random() * empty.length)] : -1;
+  }
+
+
+  // ── Medium AI ─────────────────────────────────────────────────
+  // Uses a simple priority:
+  //   1. Win immediately if there's a winning move available.
+  //   2. Block the human if they're one move away from winning.
+  //   3. Otherwise, play randomly.
+  // This means it won't miss obvious wins/blocks, but it has no
+  // long-term strategy and can still be beaten.
+  function aiMedium() {
+    const win   = findWinningMove('O'); // can O win right now?
+    if (win   !== -1) return win;
+    const block = findWinningMove('X'); // is X about to win?
+    if (block !== -1) return block;
+    return aiEasy(); // no urgent move — pick randomly
+  }
+
+  // Helper: try every empty cell and see if placing `player` there would win.
+  // Returns the winning cell index, or -1 if none found.
+  function findWinningMove(player) {
+    for (let i = 0; i < 9; i++) {
+      if (board[i] === null) {
+        board[i] = player;                  // temporarily place the mark
+        const result = checkWinner(board);
+        board[i] = null;                    // undo it
+        if (result && result.winner === player) return i; // this move wins!
+      }
+    }
+    return -1; // no winning move found
+  }
+
+
+  // ── Hard AI ───────────────────────────────────────────────────
+  // Uses depth-weighted minimax — not only does it never lose,
+  // it actively hunts the FASTEST possible win.
+  // Standard minimax gives every win a flat +10. This version
+  // subtracts the depth from the score, so:
+  //   - A win in 1 move scores +9  (very high — take it NOW)
+  //   - A win in 3 moves scores +7  (still great)
+  //   - A win in 5 moves scores +5  (meh, but still wins)
+  // This means the AI will always prefer to end the game as quickly
+  // as possible rather than idling around — it feels far more aggressive.
+  // The human still cannot win, but draws require perfect play from move 1.
+  function aiHard() {
+    return minimaxDeep(board, true, 0).index;
+  }
+
+  // minimaxDeep(b, isMaximizing, depth)
+  // Same logic as standard minimax, but `depth` tracks how many moves
+  // deep we are. Scores are adjusted by depth so the AI:
+  //   - Prefers quick wins  (high positive score - depth = still high)
+  //   - Avoids slow losses  (negative score + depth = less negative = delays)
+  //
+  // Returns { score, index }
+  function minimaxDeep(b, isMaximizing, depth) {
+    const result = checkWinner(b);
+    if (result) {
+      // Subtract depth from wins so shallower (faster) wins score higher.
+      // Add depth to losses so shallower losses are more penalised — AI avoids them harder.
+      if (result.winner === 'O') return { score: 10 - depth }; // AI wins — faster = better
+      if (result.winner === 'X') return { score: -10 + depth }; // Human wins — AI delays as long as possible
+      return { score: 0 };                                       // draw — neutral
+    }
+
+    const empty = b.map((v, i) => v === null ? i : -1).filter(i => i !== -1);
+    let best = isMaximizing ? { score: -Infinity } : { score: Infinity };
+
+    for (let i of empty) {
+      b[i] = isMaximizing ? 'O' : 'X';           // try the move
+      const val = minimaxDeep(b, !isMaximizing, depth + 1); // recurse one level deeper
+      b[i] = null;                                // undo the move
+
+      if (isMaximizing ? val.score > best.score : val.score < best.score) {
+        best = { score: val.score, index: i };
+      }
+    }
+    return best;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // fireConfetti(color)
+  // Draws an animated burst of coloured rectangles using the <canvas> API.
+  // No external library — all done from scratch.
+  //
+  // How it works:
+  //   1. Create 130 "particles", each with random position, velocity,
+  //      rotation, and size.
+  //   2. Each frame: move every particle downward (gravity), rotate it,
+  //      and fade it out (alpha -= 0.011).
+  //   3. Use requestAnimationFrame to keep the loop smooth.
+  //   4. Once all particles have faded to 0 alpha, stop the loop
+  //      and clear the canvas.
+  // ═══════════════════════════════════════════════════════════════
+  function fireConfetti(color) {
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Match the canvas pixel size to the viewport
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const accent2 = '#f5c842'; // yellow — second confetti colour for variety
+
+    // Generate 130 particles starting just above the top of the screen
+    const particles = Array.from({ length: 130 }, () => ({
+      x:       Math.random() * canvas.width, // random horizontal position
+      y:       -10,                          // start just above the viewport
+      w:       Math.random() * 10 + 5,       // random width  (5–15px)
+      h:       Math.random() * 6  + 3,       // random height (3–9px)
+      color:   Math.random() > 0.45 ? color : accent2, // mix of two colours
+      vx:      (Math.random() - 0.5) * 5,   // horizontal drift (left or right)
+      vy:      Math.random() * 4 + 2,        // downward speed
+      angle:   Math.random() * 360,          // starting rotation angle
+      spin:    (Math.random() - 0.5) * 8,   // rotation speed per frame
+      gravity: 0.15,                         // acceleration added to vy each frame
+      alpha:   1,                            // starts fully opaque, fades to 0
+    }));
+
+    let frame; // stores the requestAnimationFrame ID so we could cancel it
+
+    // Self-invoking animation loop
+    (function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // wipe previous frame
+
+      let alive = false; // tracks whether any particle is still visible
+
+      for (const p of particles) {
+        // Physics: update position and rotation
+        p.vy += p.gravity; // accelerate downward
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.angle += p.spin;
+        p.alpha -= 0.011;  // fade out gradually
+
+        if (p.alpha <= 0) continue; // skip fully faded particles
+        alive = true;
+
+        // Draw the rectangle, rotated around its own centre
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle * Math.PI / 180); // degrees → radians
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); // centred rectangle
+        ctx.restore();
+      }
+
+      // Keep looping if any particle is still visible; otherwise stop and clear
+      if (alive) frame = requestAnimationFrame(draw);
+      else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    })();
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // resetGame()
+  // Clears the board and resets turn/state for a new round.
+  // Scores are NOT cleared — use resetScores() for that.
+  // ═══════════════════════════════════════════════════════════════
+  function resetGame() {
+    board      = Array(9).fill(null); // empty all 9 cells
+    xTurn      = true;                // X always goes first
+    gameOver   = false;
+    aiThinking = false;               // clear any AI lock
+    clearWinLine();                   // hide the strike-through line
+    // Clear the thinking indicator text
+    document.getElementById('thinking').textContent = '';
+    document.getElementById('thinking').classList.remove('active');
+    render(); // redraw the fresh board
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // resetScores()
+  // Zeroes all three score counters, then starts a new game.
+  // ═══════════════════════════════════════════════════════════════
+  function resetScores() {
+    scores = { X: 0, O: 0, D: 0 };
+    resetGame();
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // setMode(m)
+  // Called when the player clicks one of the mode pills.
+  // Updates the active pill highlight, changes the player labels
+  // ("Player 1" vs "You"), and restarts the game.
+  // ═══════════════════════════════════════════════════════════════
+  function setMode(m) {
+    mode = m;
+
+    // Remove .active from all pills, then add it to the chosen one
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('pill-' + m).classList.add('active');
+
+    // Update score card labels to reflect pvp vs AI mode
+    document.getElementById('x-label').textContent = m === 'pvp' ? 'X — Player 1' : 'X — You';
+    document.getElementById('o-label').textContent = m === 'pvp' ? 'O — Player 2' : 'O — AI';
+
+    resetGame(); // start fresh with the new mode
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // toggleTheme()
+  // Reads the current data-theme attribute on <html> and flips it.
+  // All colours update automatically because they use CSS variables
+  // defined in :root vs [data-theme="dark"].
+  // Also updates the button label/emoji to match the new state.
+  // ═══════════════════════════════════════════════════════════════
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    // Flip the button label: if we just switched TO light, show "Dark" as the next option
+    document.getElementById('theme-toggle').textContent = isDark ? '🌙 Dark' : '☀️ Light';
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // toggleDevLog()
+  // Toggles the .open class on the .devlog element.
+  // CSS handles the rest:
+  //   - .open .devlog-entries → max-height animates from 0 to 300px (slides open)
+  //   - .open .devlog-chevron → rotates 180° (points up when open)
+  // ═══════════════════════════════════════════════════════════════
+  function toggleDevLog() {
+    document.getElementById('devlog').classList.toggle('open');
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // INITIAL RENDER
+  // Draw the empty board as soon as the page loads.
+  // ═══════════════════════════════════════════════════════════════
+  render();
+</script>
+</body>
+</html>
